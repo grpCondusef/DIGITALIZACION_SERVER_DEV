@@ -1,0 +1,109 @@
+version: '3.7'
+
+services:
+
+#  zookeeper:
+#    image: confluentinc/cp-zookeeper:7.5.0
+#    environment:
+#      ZOOKEEPER_CLIENT_PORT: 2181
+#      ZOOKEEPER_TICK_TIME: 2000
+#    ports:
+#      - 22181:2181
+#    networks:
+#      - my_network
+#
+#  kafka:
+#    container_name: kafka
+#    image: confluentinc/cp-kafka:7.5.0
+#    depends_on:
+#      - zookeeper
+#    ports:
+#      - 29092:29092
+#    environment:
+#      KAFKA_BROKER_ID: 1
+#      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+#      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+#      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+#      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+#      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+#    networks:
+#      - my_network
+
+  flower:
+    image: mher/flower
+    ports:
+      - 5555:5555
+    environment:
+      - CELERY_BROKER_URL=amqp://guest:guest@rabbitmq:5672/
+    networks:
+      - my_network
+
+  # 1) RABBITMQ
+  rabbitmq:
+    image: rabbitmq:3.12
+    container_name: rabbitmq
+    ports: 
+      - 5672:5672
+      - 15672:15672
+    networks:
+      - my_network
+
+  redis:
+    container_name: redis
+    image: redis:7.0.11-alpine
+    ports: 
+      - 6379:6379
+    networks:
+      - my_network
+
+  uridec_api:
+    volumes:
+      - ./archexpedientes:/app/archexpedientes
+      - static:/static
+    env_file:
+      - .env
+    build:
+      context: .
+    ports:
+      - "8000:8000"
+    environment:
+      - WORKER_TIMEOUT=14400
+      - KAFKA_BOOTSTRAP_SERVERS=kafka:9092  
+    networks:
+      - my_network
+
+  nginx:
+    build: ./nginx
+    volumes:
+      - ./archexpedientes:/app/archexpedientes
+      - static:/static
+    ports:
+      - "81:81"
+    depends_on:
+      - uridec_api
+    networks:
+      - my_network
+
+  celery:
+    container_name: celery
+    build:
+      context: . # ES LA CARPETA EN DONDE ESTÁ settings.py     
+    command: celery --app=alfresco_clone worker --hostname=celeryWorker1 -l INFO -Q tasks,dead_letter -E -B
+    volumes:
+      - .:/usr/src/app/
+    depends_on:
+      - redis
+      - uridec_api
+      - rabbitmq
+      #- kafka  # Agrega Kafka como dependencia
+    networks:
+      - my_network
+
+
+volumes:
+  static:
+
+networks:
+  my_network:
+    external:
+      name: kafka_my_network
