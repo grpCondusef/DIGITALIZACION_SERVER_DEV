@@ -65,7 +65,7 @@ services:
     build:
       context: .
     ports:
-      - "8000:8000"
+      - "8009:8009"
     environment:
       - WORKER_TIMEOUT=14400
       - KAFKA_BOOTSTRAP_SERVERS=kafka:9092  

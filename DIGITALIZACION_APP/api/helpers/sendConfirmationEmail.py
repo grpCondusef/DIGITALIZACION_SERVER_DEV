@@ -3,7 +3,7 @@ from kafka import KafkaProducer
 
 
 ORDER_KAFKA_TOPIC = 'confirm_uploading'
-producer = KafkaProducer(bootstrap_servers='10.33.1.238:29092')
+producer = KafkaProducer(bootstrap_servers='10.33.200.115:29092')
 
 
 def sendConfirmationEmail(respuesta, username, file, clave_expediente, expediente_id):
