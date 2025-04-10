@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/4.1/ref/settings/
 """
 
+from datetime import timedelta
 from pathlib import Path
 import os
 
@@ -28,8 +29,9 @@ DEBUG = True
 
 ALLOWED_HOSTS = ['*']
 
-#========== PARA ELIMINAR ERROR DE CSRF QUE APARECIÓ CON LA DOCKERIZACIÓN DE LA API ===========
-CSRF_TRUSTED_ORIGINS = ['http://10.33.1.238:81', 'http://10.33.200.115:81',]
+# ========== PARA ELIMINAR ERROR DE CSRF QUE APARECIÓ CON LA DOCKERIZACIÓN DE LA API ===========
+CSRF_TRUSTED_ORIGINS = ['http://10.33.1.238:81',
+                        'http://10.33.200.115:81', 'http://10.33.200.74:81',]
 
 
 # Application definition
@@ -41,10 +43,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    
-    #=========== APLICACIONES DEL PROYECTO ===========
+
+    # =========== APLICACIONES DEL PROYECTO ===========
     'rest_framework',
-    'rest_framework_simplejwt', #PARA LA AUTENTICACIÓN POR MEDIO DE UN JSON WEB TOKEN
+    'rest_framework_simplejwt',  # PARA LA AUTENTICACIÓN POR MEDIO DE UN JSON WEB TOKEN
     'corsheaders',
     'USER_APP',
     'CATALOGOS',
@@ -53,8 +55,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware', #==================== CORSHEADERS =====================
-    'django.middleware.clickjacking.XFrameOptionsMiddleware', #==================== CORSHEADERS =====================
+    # ==================== CORSHEADERS =====================
+    'corsheaders.middleware.CorsMiddleware',
+    # ==================== CORSHEADERS =====================
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -100,7 +104,7 @@ DATABASES = {
 }
 
 
-#DATABASES = {
+# DATABASES = {
 #    'default': {
 #        'ENGINE': 'django.db.backends.postgresql_psycopg2',
 #        'NAME': 'postgres',
@@ -109,8 +113,7 @@ DATABASES = {
 #        'HOST': '10.33.1.137',
 #        'PORT': '5432',
 #    }
-#}
-
+# }
 
 
 CACHES = {
@@ -160,13 +163,11 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
-#======================= AGREGAMOS ESTA LÍNEA PARA LA CONFIG DE NGINX  ==========================
+# ======================= AGREGAMOS ESTA LÍNEA PARA LA CONFIG DE NGINX  ==========================
 STATIC_ROOT = '/static/'
 
 
-
-
-#======================= CONFIGURACIÓN PARA SUBIR DOCUMENTOS E IMÁGENES ==========================
+# ======================= CONFIGURACIÓN PARA SUBIR DOCUMENTOS E IMÁGENES ==========================
 MEDIA_URL = '/files/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'archexpedientes')
 
@@ -185,10 +186,10 @@ CORS_ORIGIN_WHITELIST = [
 
 
 X_FRAME_OPTIONS = 'SAMEORIGIN'
-#X_FRAME_OPTIONS = 'ALLOWALL'
+# X_FRAME_OPTIONS = 'ALLOWALL'
 
 
-#X_FRAME_OPTIONS = 'ALLOW-FROM http://10.33.1.238'
+# X_FRAME_OPTIONS = 'ALLOW-FROM http://10.33.1.238'
 
 MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
 
@@ -206,31 +207,31 @@ DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
 DEFAULT_FILE_STORAGE_OPTIONS = {'max_upload_size': MAX_UPLOAD_SIZE}
 
 
-
-
-#-----------------------------MODIFICAR MODELO DE "USUARIO"----------------------------------
+# -----------------------------MODIFICAR MODELO DE "USUARIO"----------------------------------
 AUTH_USER_MODEL = 'USER_APP.User'
 
 
-#-------------------------AUTENTICACIÓN POT MEDIO DE UN TOKEN-------------------------------------------
+# -------------------------AUTENTICACIÓN POT MEDIO DE UN TOKEN-------------------------------------------
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
 }
 
-#------MODIFICAR EL TIEMPO DE VIDA DEL "ACCESS TOKEN"
-from datetime import timedelta
+# ------MODIFICAR EL TIEMPO DE VIDA DEL "ACCESS TOKEN"
 
 SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
-    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=240),  # Tiempo de vida de 4 horas
+    # Tiempo de vida de 4 horas
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=240),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=3),  # Tiempo de vida 3 días
     'BLACKLIST_AFTER_ROTATION': True,
 }
 
 
 # ======================= CONFIGURACION DE CELRY ======================
-#CELERY_BROKER_URL = os.environ.get("CELERY_BROKER", "redis://redis:6379/0")
-CELERY_BROKER_URL = os.environ.get("CELERY_BROKER", "amqp://guest:guest@rabbitmq:5672/")
-CELERY_RESULT_BACKEND = os.environ.get("CELERY_BACKEND", "redis://redis:6379/0")
+# CELERY_BROKER_URL = os.environ.get("CELERY_BROKER", "redis://redis:6379/0")
+CELERY_BROKER_URL = os.environ.get(
+    "CELERY_BROKER", "amqp://guest:guest@rabbitmq:5672/")
+CELERY_RESULT_BACKEND = os.environ.get(
+    "CELERY_BACKEND", "redis://redis:6379/0")
