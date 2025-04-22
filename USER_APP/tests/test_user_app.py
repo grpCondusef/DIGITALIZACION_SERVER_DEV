@@ -1,7 +1,8 @@
 # python3 -m pytest -s
 import requests
+import os
 
-ENDPOINT = 'http://127.0.0.1:8000/users/'
+ENDPOINT = os.environ.get("API_HOST", "http://127.0.0.1:8000/users/")
 
 TOKEN_VALIDO = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzA0NDY5NDA4LCJpYXQiOjE2NzI5MzM0MDgsImp0aSI6ImIzMDk1MTVlNjQ2YzQwZjk4YjE4ZWQyM2ExOTE4OWQ4IiwidXNlcl9pZCI6M30.M-ZjFpIWJpVUN4PkEBsIYXq8b_ncbntjW4VHCSJMxuQ'
 
