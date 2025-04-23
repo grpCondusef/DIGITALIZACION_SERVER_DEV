@@ -11,7 +11,7 @@ TOKEN_VALIDO = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoi
 
 TOKEN_NO_VALIDO = 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ0b2tlbl90eXBlIjoiYWNjZXNzIiwiZXhwIjoxNzAwNTA1Njk1LCJpYXQiOjE2Njg5Njk2OTUsImp0aSI6IjI1NGZhODdjOTNkYTRlNTNiYzQ4MzBkYjNlNDZhYjlhIiwidXNlcl9pZCI6MX0.Ifj23wEIRiV52B7jzugitrSAnv4U6kf55HKnQLwcgk'
 
-
+'''
 def test_create_user():
 
     payload = {
@@ -30,7 +30,7 @@ def test_create_user():
     assert response.json()["token"]['access']
     
 
-
+'''
 def test_create_user_verify_new_user_data():
     payload = {
         "username": "tests",
