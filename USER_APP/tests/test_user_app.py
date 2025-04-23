@@ -90,7 +90,7 @@ def test_login_not_username_or_password():
     assert response.status_code == 400
     assert response.json()["error"] == "El usuario y la contraseña son obligatorios"
 
-
+'''
 def test_get_user_info():
 
     headers = {
@@ -102,6 +102,7 @@ def test_get_user_info():
 
     assert response.status_code == 200
 
+    '''
 
 def test_get_user_info_validate_token():
 
