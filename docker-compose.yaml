@@ -105,5 +105,11 @@ volumes:
 
 networks:
   my_network:
-    external:
-      name: kafka_my_network
+    name: kafka_my_network
+
+
+#-networks:
+#-  my_network:
+#-    external:
+#-      name: kafka_my_network
+      
