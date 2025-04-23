@@ -174,7 +174,7 @@ def test_change_password_validate_data():
         assert response.status_code == 400
         assert response.json()["error"] == "Todos los campos son obligatorios"
     
-
+#change
 
 def test_logout():
 
