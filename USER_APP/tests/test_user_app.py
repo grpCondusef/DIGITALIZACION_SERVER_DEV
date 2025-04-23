@@ -132,7 +132,7 @@ def test_change_password():
     response = requests.put(ENDPOINT + 'change-password/', json=payload)
     
     assert response.status_code == 200
-'''     
+    
     
 def test_change_password_validate_data():
     
@@ -173,7 +173,7 @@ def test_change_password_validate_data():
         
         assert response.status_code == 400
         assert response.json()["error"] == "Todos los campos son obligatorios"
-    
+  '''   
 #change
 
 def test_logout():
