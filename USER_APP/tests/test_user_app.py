@@ -120,60 +120,7 @@ def test_get_user_info_validate_token():
     assert response.status_code == 401
     assert response.json()["detail"] == "El token dado no es valido para ningun tipo de token"
     
-'''   
-def test_change_password():
-    
-    payload = {
-            "username": "test",
-            'password': 'test',
-            'password2': 'test'
-        }
-    
-    response = requests.put(ENDPOINT + 'change-password/', json=payload)
-    
-    assert response.status_code == 200
-    
-    
-def test_change_password_validate_data():
-    
-    wrong_username_payload = {
-            "username": "wrong",
-            'password': 'test',
-            'password2': 'test'
-        }
-    
-    response = requests.put(ENDPOINT + 'change-password/', json=wrong_username_payload)
-    
-    assert response.status_code == 400
-    assert response.json()['error'] == 'El usuario no existe'
-    
-    different_passwords_payload = {
-        "username": "test",
-        'password': 'test',
-        'password2': 'wrong_password'
-    }
-    
-    response = requests.put(ENDPOINT + 'change-password/', json=different_passwords_payload)
-    
-    assert response.status_code == 400
-    assert response.json()['error'] == 'Las contraseñas deben coincidir'
-    
-    incomplete_fields_payload = {
-        "username": "test",
-        'password': 'test',
-        'password2': 'test'
-    }
-    
-    for field in incomplete_fields_payload:
 
-        # Elimina un campo de la carga útil
-        payload_without_field = {key: value for key, value in incomplete_fields_payload.items() if key != field}
-
-        response = requests.put(ENDPOINT + 'change-password/', json=payload_without_field)
-        
-        assert response.status_code == 400
-        assert response.json()["error"] == "Todos los campos son obligatorios"
-  '''   
 #change
 
 def test_logout():
