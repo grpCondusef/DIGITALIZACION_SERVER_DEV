@@ -78,7 +78,7 @@ services:
       - ./archexpedientes:/app/archexpedientes
       - static:/static
     ports:
-      - "8081:81"
+      - "81:81"
     depends_on:
       - uridec_api
     networks:
