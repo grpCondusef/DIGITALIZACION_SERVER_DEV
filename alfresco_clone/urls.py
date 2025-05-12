@@ -25,4 +25,5 @@ urlpatterns = [
     path('catalogos/', include('CATALOGOS.api.urls')),
     path('digitalizacion/', include('DIGITALIZACION_APP.api.urls')),
     path('dashboard/', include('DASHBOARD.api.urls')),
+    path('', include('django_prometheus.urls')),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
