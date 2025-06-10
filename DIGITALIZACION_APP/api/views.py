@@ -7,14 +7,14 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated #PARA RESTRINGIR EL ACCESO A USUARIOS AUTENTICADOS
 from datetime import datetime, timedelta
-from DIGITALIZACION_APP.models import OriginalDocuments, Portadas, SplitDocuments
+from DIGITALIZACION_APP.models import OriginalDocuments, Portadas, SplitDocuments, CertificacionExpediente
 from CATALOGOS.models import Expediente, TipoDocumental, SerieVigenciaDocumental, SerieValoracionPrimaria
 from fpdf import FPDF
 from django.http import HttpResponse
 from pathlib import Path
 import os
 from os import remove
-from USER_APP.api.permissions import SubirDocumentosPermission, DeleteDocumentsPermission
+from USER_APP.api.permissions import SubirDocumentosPermission, DeleteDocumentsPermission, CertificarExpedientePermission
 from concurrent.futures import ThreadPoolExecutor
 from DIGITALIZACION_APP.api.helpers.ProcessDocuments import process_document
 from DIGITALIZACION_APP.api.helpers.crearPortada import crear_portada
@@ -22,10 +22,141 @@ from DIGITALIZACION_APP.api.helpers.countePDFPages import count_pdf_pages
 from DIGITALIZACION_APP.api.helpers.sendConfirmationEmail import sendConfirmationEmail
 from DIGITALIZACION_APP.api.helpers.mergeFiles import merge_files
 from DIGITALIZACION_APP.api.helpers.getDocumentspath import get_documents_paths
+from DIGITALIZACION_APP.api.helpers.certificaciones_leyendas import LEYENDAS
+from DIGITALIZACION_APP.api.helpers.interpolar_leyenda import interpolar_leyenda
+from DIGITALIZACION_APP.api.helpers.generar_certificacion_pdf import generar_certificacion_pdf
 from .helpers.foliador import foliador
 import uuid
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+
+class GenerarIntegradoConArchivosSeleccionados(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        data = request.data
+        user = request.user
+
+        expediente_id = data.get('expediente')
+        selected_documents = data.get('documents')
+        if not expediente_id or not selected_documents:
+            return Response({'error': 'Faltan datos requeridos: expediente y/o documents.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            expediente = Expediente.objects.get(id=expediente_id)
+        except Expediente.DoesNotExist:
+            return Response({'error': 'No se pudo obtener el expediente.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        folioSIO = expediente.folioSIO or ''
+        clave = expediente.clave or ''
+
+        area_usuario = getattr(getattr(user, "area", None), "nombre", None)
+        if not area_usuario:
+            return Response({'error': 'El usuario no tiene un área asignada.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        leyenda = LEYENDAS.get(area_usuario)
+        if not leyenda:
+            return Response({'error': f'No hay leyenda de certificación configurada para el área: {area_usuario}'}, status=status.HTTP_400_BAD_REQUEST)
+
+        pdf_foliado_path = os.path.join(BASE_DIR, f'archexpedientes/pdf_integrados/{clave}documento_integrado.pdf')
+        if not os.path.exists(pdf_foliado_path):
+            return Response({'error': 'El PDF foliado no existe. Genere el integrado antes de certificar.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            num_fojas = count_pdf_pages(pdf_foliado_path) - 1
+            if num_fojas < 1:
+                num_fojas = 1
+        except Exception as e:
+            return Response({'error': f'No se pudo leer el PDF foliado: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        nombre_completo = f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip()
+        fecha_certificacion = datetime.now().strftime("%d/%m/%Y")
+        recurrente = data.get('recurrente')
+
+        if not recurrente:
+            leyenda_previa = leyenda.format(
+                nombre_completo=nombre_completo or "[nombre de usuario]",
+                num_fojas=num_fojas if num_fojas > 0 else "[# de fojas]",
+                folio_expediente=folioSIO or "[folio expediente]",
+                recurrente='[Escriba aquí el nombre del recurrente]',
+                fecha_certificacion=fecha_certificacion
+            )
+            return Response({
+                'leyenda_previa': leyenda_previa,
+                'recurrente_editable': True,
+                'num_fojas': num_fojas
+            }, status=status.HTTP_200_OK)
+
+        leyenda_final = interpolar_leyenda(
+            leyenda,
+            nombre_completo or "[nombre de usuario]",
+            num_fojas if num_fojas > 0 else "[# de fojas]",
+            folioSIO or "[folio expediente]",
+            recurrente,
+            fecha_certificacion
+        )
+
+        actual_year = datetime.now().year
+        actual_month = datetime.now().month
+        cert_dir = os.path.join(BASE_DIR, f'archexpedientes/expedientes_certificados/{actual_year}/{actual_month}')
+        os.makedirs(cert_dir, exist_ok=True)
+        output_cert_path = os.path.join(cert_dir, f'{folioSIO}_certificacion.pdf')
+        generar_certificacion_pdf(leyenda_final, output_cert_path)
+
+        output_final = os.path.join(cert_dir, f'{folioSIO}_certificado.pdf')
+        merge_files([pdf_foliado_path, output_cert_path], output_final)
+
+        # (Opcional) Registrar en Bitacora aquí
+
+        return Response({
+            'documento': output_final.replace(str(BASE_DIR), '').lstrip('/\\'),
+            'msg': 'Integrado, foliado y certificado generado correctamente'
+        }, status=status.HTTP_200_OK)
+        
+class CertificarExpedienteView(APIView):
+    permission_classes = [CertificarExpedientePermission]
+
+    def post(self, request):
+        """
+        Espera en el request:
+            - expediente_id: id numérico del expediente a certificar
+            - recurrente: nombre o denominación del recurrente
+            - archivo_pdf_cert: path relativo o absoluto al PDF generado de la certificación
+        """
+        expediente_id = request.data.get('expediente_id')
+        recurrente = request.data.get('recurrente')
+        archivo_pdf_cert = request.data.get('archivo_pdf_cert')  # Path relativo o absoluto al archivo
+
+        # Validación de campos requeridos
+        if not expediente_id or not recurrente or not archivo_pdf_cert:
+            return Response({'error': 'expediente_id, recurrente y archivo_pdf_cert son requeridos.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        # Obtener el objeto expediente
+        try:
+            expediente = Expediente.objects.get(id=expediente_id)
+        except Expediente.DoesNotExist:
+            return Response({'error': 'Expediente no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+        # Crear registro de certificación
+        certificacion = CertificacionExpediente.objects.create(
+            usuario=request.user,
+            area=request.user.area,
+            expediente=expediente,
+            folio_expediente=expediente.folioSIO,
+            recurrente=recurrente,
+            pdf_certificado=archivo_pdf_cert,
+        )
+
+        # Registrar en Bitacora
+        from USER_APP.models import Bitacora
+        Bitacora.objects.create(
+            user=request.user,
+            action="certificar",
+            description=f"Certificación generada para expediente {expediente.clave}",
+            expediente=expediente
+        )
+
+        return Response({'msg': 'Certificación creada', 'certificacion_id': certificacion.id}, status=201)
 
 class AddDocumentView(APIView):
 
