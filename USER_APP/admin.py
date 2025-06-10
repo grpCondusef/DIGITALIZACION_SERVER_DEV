@@ -6,7 +6,7 @@ from .models import User, Bitacora  # IMPORTAMOS NUESTROS MODELOS AL PANEL DE AD
 
 
 class UserAdmin(admin.ModelAdmin):
-    list_display = ('username', 'first_name','last_name','is_active', 'area', 'certificar_expediente' 
+    list_display = ('username', 'first_name','last_name','is_active', 'area', 'certificar_expediente', 
                     'crear_expedientes', 'eliminar_expedientes','subir_documentos', 'consulta_completa', 'migrar_expediente', 'carga_masiva', 'eliminar_documentos',)  # CAMPOS QUE APARECEN EN LA TABLA DE REGISTROS
     ordering = ('username','area',)
     search_fields = ('username', 'first_name','last_name', 'certificar_expediente',)
