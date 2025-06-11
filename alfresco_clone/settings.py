@@ -37,6 +37,7 @@ CSRF_TRUSTED_ORIGINS = ['http://10.33.200.238:81',
 # Application definition
 
 INSTALLED_APPS = [
+    'django_prometheus',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -52,9 +53,12 @@ INSTALLED_APPS = [
     'CATALOGOS',
     'DIGITALIZACION_APP',
     'DASHBOARD',
+    
 ]
 
 MIDDLEWARE = [
+    #==========================metrics Prometheus================
+    'django_prometheus.middleware.PrometheusBeforeMiddleware',
     # ==================== CORSHEADERS =====================
     'corsheaders.middleware.CorsMiddleware',
     # ==================== CORSHEADERS =====================

@@ -66,3 +66,9 @@ class DeleteDocumentsPermission(permissions.BasePermission):
             delete_documento_permission = bool(request.user and request.user.eliminar_documentos)
             return delete_documento_permission
 
+class CertificarExpedientePermission(permissions.BasePermission):
+    def has_permission(self, request, view):
+        if not request.auth:
+            return False
+        # TIENE QUE ESTAR LOGEADO Y TENER PERMISO PARA CERTIFICAR
+        return bool(request.user and getattr(request.user, 'certificar_expediente', False))

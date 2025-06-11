@@ -54,6 +54,7 @@ class User(AbstractBaseUser):
     carga_masiva = models.BooleanField(null=True, default=False)
     eliminar_documentos = models.BooleanField(null=True, default=False)
     dashboard_uau = models.BooleanField(null=True, default=False)
+    certificar_expediente = models.BooleanField(null=True, default=False)
     
     #campos atributos de django
     date_joined = models.DateTimeField(auto_now_add=True)
