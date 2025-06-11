@@ -187,11 +187,12 @@ CORS_ORIGIN_WHITELIST = [
     'http://10.33.1.238',
     'http://10.33.200.115',
     'http://10.33.200.74:81',
-    'http://10.33.200.74:85'
+    'http://10.33.200.74:85',
+    'http://localhost:5173'
 ]
 # PRUEBa
 
-X_FRAME_OPTIONS = 'SAMEORIGIN'
+X_FRAME_OPTIONS = 'ALLOWALL'
 # X_FRAME_OPTIONS = 'ALLOWALL'
 
 
