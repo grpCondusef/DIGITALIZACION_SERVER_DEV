@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 import pytz #PARA TRABAJAR CON LA FECHA
 from django.forms.models import model_to_dict
-from CATALOGOS.models import Areas, AreaSIO, TipoDocumental, TipoMacroproceso, Macroproceso, Proceso, Serie,Areas , Expediente, InstitucionesFinancieras, ExpedienteOptions, AlfrescoCCA, SerieVigenciaDocumental, SerieValoracionPrimaria
+from CATALOGOS.models import Areas, AreaSIO, TipoDocumental, TipoMacroproceso, Macroproceso, Proceso, Serie, Areas, Expediente, InstitucionesFinancieras, ExpedienteOptions, AlfrescoCCA, SerieVigenciaDocumental, SerieValoracionPrimaria
 from CATALOGOS.api.serializers import TipoDocumentalSerializer,TipoMacroprocesoSerializer, MacroprocesoSerializer, ProcesoSerializer, SerieSerializer, ExpedienteSerializer, InstitucionesFianancierasSerializer
 from rest_framework.permissions import IsAuthenticated #PARA RESTRINGIR EL ACCESO A USUARIOS AUTENTICADOS
 from USER_APP.api.permissions import CrearExpedientesPermission, CargaMasivaPermission, RemoveExpedientesPermission
@@ -20,6 +20,7 @@ from CATALOGOS.api.functions.transformFolioSio import transformFolioSio
 from DIGITALIZACION_APP.models import Portadas
 from DIGITALIZACION_APP.api.helpers.crearPortada import crear_portada
 from django.core.cache import cache
+from django.utils import timezone
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
     
@@ -303,19 +304,16 @@ class IFListView(APIView):
 
 class AddExpedientesView(APIView):
     
-    permission_classes = [CrearExpedientesPermission]  # PERMISOS
+    permission_classes = [CrearExpedientesPermission]
     
     def post(self, request):    
-        
         data = {}
-        
         user_id = self.request.user.id
         user_area = self.request.user.area_id
-        
         expediente_data = self.request.data
-        
+
         if AreaSIO.objects.filter(idArea_id=user_area).exists():
-            folioSIO = transformFolioSio(expediente_data['folioSIO'].strip()) #BORRAMOS ESPACIOS EN BANCO AL INICIO Y AL FINAL
+            folioSIO = transformFolioSio(expediente_data['folioSIO'].strip())
         else:
             folioSIO = expediente_data['folioSIO'].strip()
             
@@ -324,53 +322,47 @@ class AddExpedientesView(APIView):
             'fechaApertura', 'resumenContenido', 'idAreaProcedenciaN', 'folioSIO',
             'idAreaSIO', 'reclamante', 'idInstitucion', 'idEstatus', 'pori', 'instanciaProceso', 'formatoSoporte'
         ]
-
-        # DEVUELVE EL "campo obligatorio" SI NO VIENE EN "expediente_data" Y ES UNA LISTA
         missing_fields = [field for field in required_fields if field not in expediente_data]
-        
-        # SI HAY DATOS EN "missing_fields" 
         if missing_fields:
             data['error'] = f'Faltan los siguientes campos obligatorios: {", ".join(missing_fields)}'
             return Response(data, status=status.HTTP_400_BAD_REQUEST)
-        
-        idMacroproceso=expediente_data['idMacroproceso']
-        idProceso=expediente_data['idProceso']
-        idSerie=expediente_data['idSerie']
+
+        idMacroproceso = expediente_data['idMacroproceso']
+        idProceso = expediente_data['idProceso']
+        idSerie = expediente_data['idSerie']
         
         try:
             macroprocesos = Macroproceso.objects.get(id=idMacroproceso)
             macroproceso_clave = macroprocesos.clave
         except Exception as e:
-                data['error'] = "Parece que ocurrió un error al consultar los macroprocesos que están disponibles"
-                return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
+            data['error'] = "Parece que ocurrió un error al consultar los macroprocesos que están disponibles"
+            return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
         
         try:
             procesos = Proceso.objects.get(id=idProceso)
             proceso_clave = procesos.clave
         except Exception as e:
-                data['error'] = "Parece que ocurrió un error al consultar los procesos que están disponibles"
-                return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
+            data['error'] = "Parece que ocurrió un error al consultar los procesos que están disponibles"
+            return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
         
         try:
             series = Serie.objects.get(id=idSerie)
             serie_clave = series.clave
         except Exception as e:
-                data['error'] = "Parece que ocurrió un error al consultar las series que están disponibles"
-                return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
+            data['error'] = "Parece que ocurrió un error al consultar las series que están disponibles"
+            return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
         
-        today = datetime.now().replace(tzinfo=pytz.UTC).date()   # TRAIGO LA FECHA DE HOY
-        actual_year = today.year 
-        
+        today = timezone.now().date()
+        actual_year = today.year
         pre_cca = f'{macroproceso_clave}.{proceso_clave}.{serie_clave}.{actual_year}'
         
-        expedientes = Expediente.objects.filter(idMacroproceso=idMacroproceso,idProceso=idProceso,idSerie=idSerie,clave__contains=pre_cca)
+        expedientes = Expediente.objects.filter(idMacroproceso=idMacroproceso, idProceso=idProceso, idSerie=idSerie, clave__contains=pre_cca)
         expedientes_folioSIO = Expediente.objects.all().exclude(idEstatus_id=4)
         
         foliosSIO_array = []
         claves_archivisticas = []
         for expediente in expedientes:
             claves_archivisticas.append(expediente.clave)
-            
         for expediente_folio in expedientes_folioSIO:
             foliosSIO_array.append(str(expediente_folio.folioSIO.strip()))
             
@@ -379,7 +371,6 @@ class AddExpedientesView(APIView):
         if folioSIO in foliosSIO_array and AreaSIO.objects.filter(idArea_id=user_area).exists():
             return Response({'msg':'El folio SIO ya existe!!!'}, status=status.HTTP_400_BAD_REQUEST)
         else:
-
             cca = {}
             cca['clave_archivistica'] = f'{macroproceso_clave}.{proceso_clave}.{serie_clave}.{actual_year}.{consecutivo}'
             
@@ -390,8 +381,28 @@ class AddExpedientesView(APIView):
             new_expediente_data['idMacroproceso'] = expediente_data['idMacroproceso']
             new_expediente_data['idProceso'] = expediente_data['idProceso']
             new_expediente_data['idSerie'] = expediente_data['idSerie']
-            new_expediente_data['fechaCreacion'] = expediente_data['fechaCreacion']
-            new_expediente_data['fechaApertura'] = expediente_data['fechaApertura']
+
+            # --- CAMBIO CRÍTICO: FECHAS AWARE ---
+            try:
+                fechaCreacion_str = expediente_data['fechaCreacion']
+                if "T" in fechaCreacion_str:
+                    fechaCreacion = timezone.make_aware(datetime.fromisoformat(fechaCreacion_str))
+                else:
+                    fechaCreacion = timezone.make_aware(datetime.strptime(fechaCreacion_str, "%Y-%m-%d"))
+            except Exception:
+                fechaCreacion = timezone.now()
+            new_expediente_data['fechaCreacion'] = fechaCreacion
+
+            try:
+                fechaApertura_str = expediente_data['fechaApertura']
+                if "T" in fechaApertura_str:
+                    fechaApertura = timezone.make_aware(datetime.fromisoformat(fechaApertura_str))
+                else:
+                    fechaApertura = timezone.make_aware(datetime.strptime(fechaApertura_str, "%Y-%m-%d"))
+            except Exception:
+                fechaApertura = timezone.now()
+            new_expediente_data['fechaApertura'] = fechaApertura
+
             new_expediente_data['resumenContenido'] = expediente_data['resumenContenido']
             new_expediente_data['idAreaProcedenciaN'] = expediente_data['idAreaProcedenciaN']
             new_expediente_data['folioSIO'] = folioSIO
@@ -426,7 +437,6 @@ class AddExpedientesView(APIView):
                         formatoSoporte=new_expediente_data['formatoSoporte'],
                         sistema=new_expediente_data['sistema'],
                     )
-            
                 new_expediente_data['id'] = expediente.id
             except Exception as e:
                 data['error'] = "Parece que ocurrió un error al crear el expediente con folio {}".format(new_expediente_data['folioSIO'])
@@ -435,8 +445,7 @@ class AddExpedientesView(APIView):
             return Response({
                 'msg': 'Expediente creado existosamente',
                 'expediente_data': new_expediente_data
-            }, status=status.HTTP_200_OK)       
-   
+            }, status=status.HTTP_200_OK)
 
    
 class CargaMasivaView(APIView):
