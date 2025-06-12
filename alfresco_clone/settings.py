@@ -30,23 +30,9 @@ DEBUG = True
 ALLOWED_HOSTS = ['*']
 
 # ========== PARA ELIMINAR ERROR DE CSRF QUE APARECIÓ CON LA DOCKERIZACIÓN DE LA API ===========
-<<<<<<< HEAD
-CSRF_TRUSTED_ORIGINS = ['http://10.33.200.238:81',
-                        'http://localhost:5173',
-                        ]
-=======
-CSRF_TRUSTED_ORIGINS = [
-    'http://10.33.1.238:81',
-    'http://127.0.0.1:8000',
-    'http://localhost:5173',
-    'http://10.33.200.115:81',
-    'http://10.33.200.74:81',
-    'http://10.33.200.74:85'
-]
->>>>>>> 3f26fdfe857f3a198ca6e6fc49cba824e1337e49
+CSRF_TRUSTED_ORIGINS = ['http://10.33.200.238:81', 'http://localhost:5173']
 
 # Application definition
-
 INSTALLED_APPS = [
     'django_prometheus',
     'django.contrib.admin',
@@ -64,11 +50,11 @@ INSTALLED_APPS = [
     'CATALOGOS',
     'DIGITALIZACION_APP',
     'DASHBOARD',
-    
+
 ]
 
 MIDDLEWARE = [
-    #==========================metrics Prometheus================
+    # ==========================metrics Prometheus================
     'django_prometheus.middleware.PrometheusBeforeMiddleware',
     # ==================== CORSHEADERS =====================
     'corsheaders.middleware.CorsMiddleware',
@@ -195,16 +181,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ORIGIN_ALLOW_ALL = True
 
 CORS_ORIGIN_WHITELIST = [
-<<<<<<< HEAD
     'http://localhost:5173',
     'http://10.33.200.238:81',
-=======
-    'http://10.33.1.238',
-    'http://10.33.200.115',
-    'http://10.33.200.74:81',
-    'http://10.33.200.74:85',
-    'http://localhost:5173'
->>>>>>> 3f26fdfe857f3a198ca6e6fc49cba824e1337e49
 ]
 
 # PRUEBa
