@@ -8,7 +8,7 @@ import pandas as pd
 import os
 from pathlib import Path
 import pytz #PARA TRABAJAR CON LA FECHA
-from django.forms.models import model_to_dict
+from django.utils import timezone  # <--- NUEVO: para fechas con timezone
 from CATALOGOS.models import Areas, AreaSIO, TipoDocumental, TipoMacroproceso, Macroproceso, Proceso, Serie,Areas , Expediente, InstitucionesFinancieras, ExpedienteOptions, AlfrescoCCA, SerieVigenciaDocumental, SerieValoracionPrimaria
 from CATALOGOS.api.serializers import TipoDocumentalSerializer,TipoMacroprocesoSerializer, MacroprocesoSerializer, ProcesoSerializer, SerieSerializer, ExpedienteSerializer, InstitucionesFianancierasSerializer
 from rest_framework.permissions import IsAuthenticated #PARA RESTRINGIR EL ACCESO A USUARIOS AUTENTICADOS
@@ -302,141 +302,143 @@ class IFListView(APIView):
             }, status.HTTP_200_OK)
 
 class AddExpedientesView(APIView):
-    
     permission_classes = [CrearExpedientesPermission]  # PERMISOS
-    
-    def post(self, request):    
-        
+
+    def post(self, request):
         data = {}
-        
         user_id = self.request.user.id
         user_area = self.request.user.area_id
-        
         expediente_data = self.request.data
-        
+
         if AreaSIO.objects.filter(idArea_id=user_area).exists():
-            folioSIO = transformFolioSio(expediente_data['folioSIO'].strip()) #BORRAMOS ESPACIOS EN BANCO AL INICIO Y AL FINAL
+            folioSIO = transformFolioSio(expediente_data['folioSIO'].strip())
         else:
             folioSIO = expediente_data['folioSIO'].strip()
-            
+
         required_fields = [
             'idTipoMacroproceso', 'idMacroproceso', 'idProceso', 'idSerie', 'fechaCreacion',
             'fechaApertura', 'resumenContenido', 'idAreaProcedenciaN', 'folioSIO',
             'idAreaSIO', 'reclamante', 'idInstitucion', 'idEstatus', 'pori', 'instanciaProceso', 'formatoSoporte'
         ]
-
-        # DEVUELVE EL "campo obligatorio" SI NO VIENE EN "expediente_data" Y ES UNA LISTA
         missing_fields = [field for field in required_fields if field not in expediente_data]
-        
-        # SI HAY DATOS EN "missing_fields" 
         if missing_fields:
             data['error'] = f'Faltan los siguientes campos obligatorios: {", ".join(missing_fields)}'
             return Response(data, status=status.HTTP_400_BAD_REQUEST)
-        
-        idMacroproceso=expediente_data['idMacroproceso']
-        idProceso=expediente_data['idProceso']
-        idSerie=expediente_data['idSerie']
-        
+
+        idMacroproceso = expediente_data['idMacroproceso']
+        idProceso = expediente_data['idProceso']
+        idSerie = expediente_data['idSerie']
+
         try:
             macroprocesos = Macroproceso.objects.get(id=idMacroproceso)
             macroproceso_clave = macroprocesos.clave
         except Exception as e:
-                data['error'] = "Parece que ocurrió un error al consultar los macroprocesos que están disponibles"
-                return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
-        
+            data['error'] = "Parece que ocurrió un error al consultar los macroprocesos que están disponibles"
+            return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         try:
             procesos = Proceso.objects.get(id=idProceso)
             proceso_clave = procesos.clave
         except Exception as e:
-                data['error'] = "Parece que ocurrió un error al consultar los procesos que están disponibles"
-                return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
-        
+            data['error'] = "Parece que ocurrió un error al consultar los procesos que están disponibles"
+            return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
         try:
             series = Serie.objects.get(id=idSerie)
             serie_clave = series.clave
         except Exception as e:
-                data['error'] = "Parece que ocurrió un error al consultar las series que están disponibles"
-                return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
-        
-        today = datetime.now().replace(tzinfo=pytz.UTC).date()   # TRAIGO LA FECHA DE HOY
-        actual_year = today.year 
-        
+            data['error'] = "Parece que ocurrió un error al consultar las series que están disponibles"
+            return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # USAR FECHAS CON ZONA HORARIA (timezone-aware)
+        # Si recibes fechas tipo string: "YYYY-MM-DD"
+        try:
+            # Fecha de creación: si ya viene en string, conviértela
+            fechaCreacion = expediente_data['fechaCreacion']
+            if isinstance(fechaCreacion, str):
+                fechaCreacion = timezone.make_aware(datetime.strptime(fechaCreacion, "%Y-%m-%d"))
+            # Fecha de apertura
+            fechaApertura = expediente_data['fechaApertura']
+            if isinstance(fechaApertura, str):
+                fechaApertura = timezone.make_aware(datetime.strptime(fechaApertura, "%Y-%m-%d"))
+        except Exception as e:
+            data['error'] = f"Error al convertir las fechas: {e}"
+            return Response(data, status=status.HTTP_400_BAD_REQUEST)
+
+        today = timezone.now().date()
+        actual_year = today.year
+
         pre_cca = f'{macroproceso_clave}.{proceso_clave}.{serie_clave}.{actual_year}'
-        
-        expedientes = Expediente.objects.filter(idMacroproceso=idMacroproceso,idProceso=idProceso,idSerie=idSerie,clave__contains=pre_cca)
+
+        expedientes = Expediente.objects.filter(idMacroproceso=idMacroproceso, idProceso=idProceso, idSerie=idSerie, clave__contains=pre_cca)
         expedientes_folioSIO = Expediente.objects.all().exclude(idEstatus_id=4)
-        
+
         foliosSIO_array = []
         claves_archivisticas = []
         for expediente in expedientes:
             claves_archivisticas.append(expediente.clave)
-            
         for expediente_folio in expedientes_folioSIO:
             foliosSIO_array.append(str(expediente_folio.folioSIO.strip()))
-            
-        consecutivo = generarConsecutivo(claves_archivisticas)
-            
-        if folioSIO in foliosSIO_array and AreaSIO.objects.filter(idArea_id=user_area).exists():
-            return Response({'msg':'El folio SIO ya existe!!!'}, status=status.HTTP_400_BAD_REQUEST)
-        else:
 
+        consecutivo = generarConsecutivo(claves_archivisticas)
+
+        if folioSIO in foliosSIO_array and AreaSIO.objects.filter(idArea_id=user_area).exists():
+            return Response({'msg': 'El folio SIO ya existe!!!'}, status=status.HTTP_400_BAD_REQUEST)
+        else:
             cca = {}
             cca['clave_archivistica'] = f'{macroproceso_clave}.{proceso_clave}.{serie_clave}.{actual_year}.{consecutivo}'
-            
-            new_expediente_data = {}
-            new_expediente_data['clave'] = cca['clave_archivistica']
-            new_expediente_data['idUsuarioCreador'] = user_id
-            new_expediente_data['idTipoMacroproceso'] = expediente_data['idTipoMacroproceso']
-            new_expediente_data['idMacroproceso'] = expediente_data['idMacroproceso']
-            new_expediente_data['idProceso'] = expediente_data['idProceso']
-            new_expediente_data['idSerie'] = expediente_data['idSerie']
-            new_expediente_data['fechaCreacion'] = expediente_data['fechaCreacion']
-            new_expediente_data['fechaApertura'] = expediente_data['fechaApertura']
-            new_expediente_data['resumenContenido'] = expediente_data['resumenContenido']
-            new_expediente_data['idAreaProcedenciaN'] = expediente_data['idAreaProcedenciaN']
-            new_expediente_data['folioSIO'] = folioSIO
-            new_expediente_data['idAreaSIO'] = expediente_data['idAreaSIO']
-            new_expediente_data['reclamante'] = expediente_data['reclamante']
-            new_expediente_data['idInstitucion'] = expediente_data['idInstitucion']
-            new_expediente_data['idEstatus'] = expediente_data['idEstatus']
-            new_expediente_data['pori'] = expediente_data['pori']
-            new_expediente_data['instanciaProceso'] = expediente_data['instanciaProceso']
-            new_expediente_data['formatoSoporte'] = expediente_data['formatoSoporte']
-            new_expediente_data['sistema'] = 'uridec'
-            
+            new_expediente_data = {
+                'clave': cca['clave_archivistica'],
+                'idUsuarioCreador': user_id,
+                'idTipoMacroproceso': expediente_data['idTipoMacroproceso'],
+                'idMacroproceso': expediente_data['idMacroproceso'],
+                'idProceso': expediente_data['idProceso'],
+                'idSerie': expediente_data['idSerie'],
+                'fechaCreacion': fechaCreacion,
+                'fechaApertura': fechaApertura,
+                'resumenContenido': expediente_data['resumenContenido'],
+                'idAreaProcedenciaN': expediente_data['idAreaProcedenciaN'],
+                'folioSIO': folioSIO,
+                'idAreaSIO': expediente_data['idAreaSIO'],
+                'reclamante': expediente_data['reclamante'],
+                'idInstitucion': expediente_data['idInstitucion'],
+                'idEstatus': expediente_data['idEstatus'],
+                'pori': expediente_data['pori'],
+                'instanciaProceso': expediente_data['instanciaProceso'],
+                'formatoSoporte': expediente_data['formatoSoporte'],
+                'sistema': 'uridec',
+            }
             try:
                 expediente = Expediente.objects.create(
-                        clave=new_expediente_data['clave'],
-                        idUsuarioCreador_id=new_expediente_data['idUsuarioCreador'],
-                        idTipoMacroproceso_id=new_expediente_data['idTipoMacroproceso'],
-                        idMacroproceso_id=new_expediente_data['idMacroproceso'],
-                        idProceso_id=new_expediente_data['idProceso'],
-                        idSerie_id=new_expediente_data['idSerie'],
-                        fechaCreacion=new_expediente_data['fechaCreacion'],
-                        fechaApertura=new_expediente_data['fechaApertura'],
-                        resumenContenido=new_expediente_data['resumenContenido'],
-                        idAreaProcedenciaN_id=new_expediente_data['idAreaProcedenciaN'],
-                        folioSIO=new_expediente_data['folioSIO'],
-                        idAreaSIO_id=new_expediente_data['idAreaSIO'],
-                        reclamante=new_expediente_data['reclamante'],
-                        idInstitucion_id=new_expediente_data['idInstitucion'],
-                        idEstatus_id=new_expediente_data['idEstatus'],
-                        instanciaProceso=new_expediente_data['instanciaProceso'],
-                        pori=new_expediente_data['pori'],
-                        formatoSoporte=new_expediente_data['formatoSoporte'],
-                        sistema=new_expediente_data['sistema'],
-                    )
-            
+                    clave=new_expediente_data['clave'],
+                    idUsuarioCreador_id=new_expediente_data['idUsuarioCreador'],
+                    idTipoMacroproceso_id=new_expediente_data['idTipoMacroproceso'],
+                    idMacroproceso_id=new_expediente_data['idMacroproceso'],
+                    idProceso_id=new_expediente_data['idProceso'],
+                    idSerie_id=new_expediente_data['idSerie'],
+                    fechaCreacion=new_expediente_data['fechaCreacion'],     # timezone-aware
+                    fechaApertura=new_expediente_data['fechaApertura'],     # timezone-aware
+                    resumenContenido=new_expediente_data['resumenContenido'],
+                    idAreaProcedenciaN_id=new_expediente_data['idAreaProcedenciaN'],
+                    folioSIO=new_expediente_data['folioSIO'],
+                    idAreaSIO_id=new_expediente_data['idAreaSIO'],
+                    reclamante=new_expediente_data['reclamante'],
+                    idInstitucion_id=new_expediente_data['idInstitucion'],
+                    idEstatus_id=new_expediente_data['idEstatus'],
+                    instanciaProceso=new_expediente_data['instanciaProceso'],
+                    pori=new_expediente_data['pori'],
+                    formatoSoporte=new_expediente_data['formatoSoporte'],
+                    sistema=new_expediente_data['sistema'],
+                )
                 new_expediente_data['id'] = expediente.id
             except Exception as e:
-                data['error'] = "Parece que ocurrió un error al crear el expediente con folio {}".format(new_expediente_data['folioSIO'])
-                return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR) 
-            
+                data['error'] = f"Parece que ocurrió un error al crear el expediente con folio {new_expediente_data['folioSIO']}: {e}"
+                return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
             return Response({
                 'msg': 'Expediente creado existosamente',
                 'expediente_data': new_expediente_data
-            }, status=status.HTTP_200_OK)       
-   
+            }, status=status.HTTP_200_OK)
 
    
 class CargaMasivaView(APIView):
