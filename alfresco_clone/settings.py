@@ -30,9 +30,14 @@ DEBUG = True
 ALLOWED_HOSTS = ['*']
 
 # ========== PARA ELIMINAR ERROR DE CSRF QUE APARECIÓ CON LA DOCKERIZACIÓN DE LA API ===========
-CSRF_TRUSTED_ORIGINS = ['http://10.33.1.238:81',
-                        'http://10.33.200.115:81', 'http://10.33.200.74:81', 'http://10.33.200.74:85']
-
+CSRF_TRUSTED_ORIGINS = [
+    'http://10.33.1.238:81',
+    'http://127.0.0.1:8000',
+    'http://localhost:5173',
+    'http://10.33.200.115:81',
+    'http://10.33.200.74:81',
+    'http://10.33.200.74:85'
+]
 
 # Application definition
 

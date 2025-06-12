@@ -33,6 +33,7 @@ def create_rectangle(pdf, x, y, width, height):
     pdf.rect(x, y, width, height)
     
 def create_qr_code(expediente_data, path_img):
+    os.makedirs(path_img, exist_ok=True)
     qr = qrcode.QRCode(version=1, box_size=10, border=5)
     qr.add_data(expediente_data.get("clave"))
     qr.make(fit=True)
