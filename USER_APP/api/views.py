@@ -106,6 +106,7 @@ class LoginView(APIView):
                 data['carga_masiva']=account.carga_masiva
                 data['eliminar_documentos']=account.eliminar_documentos
                 data['dashboard_uau']=account.dashboard_uau
+                data['certificar_expediente']=account.certificar_expediente
                 areas_asociadas = account.areas_asociadas.all() #ESTA ES UNA TABLA INTERMEDIA
                 for area in areas_asociadas:
                     areas_asociadas_array.append(model_to_dict(area))
@@ -278,6 +279,7 @@ class UserInfoView(APIView):
             data['carga_masiva']=user.carga_masiva
             data['eliminar_documentos']=user.eliminar_documentos
             data['dashboard_uau']=user.dashboard_uau
+            data['certificar_expediente']=user.certificar_expediente
             areas_asociadas = user.areas_asociadas.all() #ESTA ES UNA TABLA INTERMEDIA
             for area in areas_asociadas:
                 areas_asociadas_array.append(model_to_dict(area))
