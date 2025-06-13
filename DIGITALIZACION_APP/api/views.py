@@ -39,8 +39,10 @@ class GenerarIntegradoConArchivosSeleccionados(APIView):
 
         expediente_id = data.get('expediente')
         selected_documents = data.get('documents')
-        if not expediente_id or not selected_documents:
-            return Response({'error': 'Faltan datos requeridos: expediente y/o documents.'}, status=status.HTTP_400_BAD_REQUEST)
+        clave = data.get('clave') or ""
+
+        if not expediente_id or not selected_documents or not clave:
+            return Response({'error': 'Faltan datos requeridos: expediente, clave y/o documents.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             expediente = Expediente.objects.get(id=expediente_id)
@@ -48,8 +50,46 @@ class GenerarIntegradoConArchivosSeleccionados(APIView):
             return Response({'error': 'No se pudo obtener el expediente.'}, status=status.HTTP_400_BAD_REQUEST)
 
         folioSIO = expediente.folioSIO or ''
-        clave = expediente.clave or ''
 
+        # --- Paso 1: PDF integrado y foliado ---
+        documents_array = []
+        portada = Portadas.objects.filter(expediente_id=expediente_id).first()
+        if portada is None:
+            serie_id = expediente.idSerie.id
+            vigencias = SerieVigenciaDocumental.objects.filter(idSerie_id=serie_id)
+            vigencia_ids = {1: None, 2: None, 3: None}
+            for vigencia in vigencias:
+                vigencia_ids[vigencia.idVigenciaDocumental_id] = {
+                    "anios": vigencia.anios,
+                    "meses": vigencia.meses,
+                    "dias": vigencia.dias
+                }
+            valoresDocumentales_array = [valor.idValoracionPrimaria.nombre for valor in SerieValoracionPrimaria.objects.filter(idSerie_id=serie_id)]
+            actual_year = datetime.now().year
+            actual_month = datetime.now().month
+            actual_day = datetime.now().day
+            path_img = os.path.join(BASE_DIR, 'archexpedientes/img/')
+            portada_path = f'uridec/pdf_portadas/{actual_year}/{actual_month}/{actual_day}/{clave}_portada.pdf'
+            Portadas.objects.create(
+                name=f'Portada del expediente {clave}',
+                path=portada_path,
+                expediente_id=expediente_id,
+                user_id=user.id,
+            )
+            crear_portada(BASE_DIR, path_img, clave, expediente, vigencia_ids, valoresDocumentales_array, serie_id)
+            documents_array.append(os.path.join(BASE_DIR, f'archexpedientes/{portada_path}'))
+        else:
+            documents_array.append(os.path.join(BASE_DIR, f'archexpedientes/{str(portada.path)}'))
+
+        documentos = SplitDocuments.objects.filter(id__in=selected_documents, visible=True).order_by('date_creation')
+        get_documents_paths(BASE_DIR, documentos, documents_array)
+
+        # Generar PDF foliado integrado
+        pdf_foliado_path = os.path.join(BASE_DIR, f'archexpedientes/pdf_integrados/{clave}documento_integrado.pdf')
+        with ThreadPoolExecutor() as executor:
+            executor.submit(merge_files, documents_array, pdf_foliado_path)
+
+        # --- Paso 2: Lógica de certificación ---
         area_usuario = getattr(getattr(user, "area", None), "nombre", None)
         if not area_usuario:
             return Response({'error': 'El usuario no tiene un área asignada.'}, status=status.HTTP_400_BAD_REQUEST)
@@ -58,7 +98,6 @@ class GenerarIntegradoConArchivosSeleccionados(APIView):
         if not leyenda:
             return Response({'error': f'No hay leyenda de certificación configurada para el área: {area_usuario}'}, status=status.HTTP_400_BAD_REQUEST)
 
-        pdf_foliado_path = os.path.join(BASE_DIR, f'archexpedientes/pdf_integrados/{clave}documento_integrado.pdf')
         if not os.path.exists(pdf_foliado_path):
             return Response({'error': 'El PDF foliado no existe. Genere el integrado antes de certificar.'}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -73,7 +112,8 @@ class GenerarIntegradoConArchivosSeleccionados(APIView):
         fecha_certificacion = datetime.now().strftime("%d/%m/%Y")
         recurrente = data.get('recurrente')
 
-        if not recurrente:
+        # Si falta recurrente, NO generes certificado, manda la leyenda previa obligando al usuario a escribirlo
+        if not recurrente or not recurrente.strip():
             leyenda_previa = leyenda.format(
                 nombre_completo=nombre_completo or "[nombre de usuario]",
                 num_fojas=num_fojas if num_fojas > 0 else "[# de fojas]",
@@ -87,6 +127,7 @@ class GenerarIntegradoConArchivosSeleccionados(APIView):
                 'num_fojas': num_fojas
             }, status=status.HTTP_200_OK)
 
+        # Generar la leyenda final interpolada
         leyenda_final = interpolar_leyenda(
             leyenda,
             nombre_completo or "[nombre de usuario]",
@@ -96,20 +137,27 @@ class GenerarIntegradoConArchivosSeleccionados(APIView):
             fecha_certificacion
         )
 
+        # Generar página de certificación y unir al integrado
         actual_year = datetime.now().year
         actual_month = datetime.now().month
         cert_dir = os.path.join(BASE_DIR, f'archexpedientes/expedientes_certificados/{actual_year}/{actual_month}')
         os.makedirs(cert_dir, exist_ok=True)
-        output_cert_path = os.path.join(cert_dir, f'{folioSIO}_certificacion.pdf')
+        
+        # LIMPIA el folioSIO para evitar subcarpetas no deseadas
+        folio_filename = folioSIO.replace("/", "_")
+        
+        output_cert_path = os.path.join(cert_dir, f'{folio_filename}_certificacion.pdf')
+        # Por si acaso, asegura que exista la carpeta (aunque casi nunca será necesario ya con la limpieza)
+        os.makedirs(os.path.dirname(output_cert_path), exist_ok=True)
+        
         generar_certificacion_pdf(leyenda_final, output_cert_path)
-
-        output_final = os.path.join(cert_dir, f'{folioSIO}_certificado.pdf')
+        
+        output_final = os.path.join(cert_dir, f'{folio_filename}_certificado.pdf')
         merge_files([pdf_foliado_path, output_cert_path], output_final)
-
-        # (Opcional) Registrar en Bitacora aquí
+                # Opcional: registrar bitácora aquí
 
         return Response({
-            'documento': output_final.replace(str(BASE_DIR), '').lstrip('/\\'),
+            'documento': output_final.replace(str(BASE_DIR), '').replace("archexpedientes/", "").lstrip('/\\'),
             'msg': 'Integrado, foliado y certificado generado correctamente'
         }, status=status.HTTP_200_OK)
         
@@ -453,125 +501,6 @@ class GenerarIntegrado(APIView):
                 {'error': 'Parece que el expediente seleccionado no tiene archivos cargados'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR)        
             
-
-
-class GenerarIntegradoConArchivosSeleccionados(APIView):
-    
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
-        data = self.request.data
-
-        user_id = self.request.user.id
-        clave = data['clave']
-        expediente_id = data['expediente']
-        selected_documents = data['documents']
-        
-        documents_array = []
-        
-        # CORROBORAR QUE SE PROPORCIONÓ LA CLAVE Y EL I DEL EXPEDIENTE
-        if clave is None or expediente_id is None:
-            data['error'] = 'Es necesario proporcionar el id y la clave del expediente'
-            return Response(data, status=status.HTTP_400_BAD_REQUEST)
-        
-        # OBTENER LOS DOCUMENTOS DEL EXPEDIENTE
-        try:
-            documentos = SplitDocuments.objects.filter(id__in=selected_documents, visible=True).order_by('date_creation')
-        except Exception as e:
-            data['error'] = 'Parece que ha ocurrido un error al intentar obtener los datos del expediente seleccionado'
-            return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
-        # SI EL DOCUMENTO TIENE DOCUMENTOS CARGADOS
-        if documentos.count() > 0:
-            
-            # CONSULTADOS SI EXISTE UNA PORTADA PARA ESTE EXPEDIENTE
-            try:
-                portada = Portadas.objects.filter(expediente_id=expediente_id).first()
-            except Exception as e:
-                data['error'] = 'Parece que ha ocurrido un error al intentar consultar la portada del expediente'
-                return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-            
-            # SI NO HA SIDO CREADA LA PORTADA, LA CREAMOS Y AGREGAMOS AL INTEGRADO DEL EXPEDIENTE
-            if portada is None:
-                
-                # CONSULTAR LOS DATOS DEL EXPEDIENTE, PARA SABER QUÉ SERIE TIENE LIGADA Y AGREGAR LAS VIGENCIAS  Y VALORES 
-                # DOCUMENTALES, CORRESPONDIENTES AL EXPEDIENTE
-                try:
-                    expediente = Expediente.objects.get(id=expediente_id)
-                except Exception as e:
-                    data['error'] = 'Parece que ha ocurrido un error al intentar obtener los datos del expediente'
-                    return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                
-                serie_id = expediente.idSerie.id
-                
-                # Consulta única para obtener las vigencias
-                try:
-                    vigencias = SerieVigenciaDocumental.objects.filter(idSerie_id=serie_id)
-                except Exception as e:
-                    data['error'] = 'Parece que ha habido un error al intentar consultar las vigencias documentales disponibles para este expediente'
-                    return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-                # Asignación de las vigencias
-                vigencia_ids = {1: None, 2: None, 3: None}
-                for vigencia in vigencias:
-                    vigencia_ids[vigencia.idVigenciaDocumental_id] = {}
-
-                    vigencia_ids[vigencia.idVigenciaDocumental_id]["anios"] = vigencia.anios
-                    vigencia_ids[vigencia.idVigenciaDocumental_id]["meses"] = vigencia.meses
-                    vigencia_ids[vigencia.idVigenciaDocumental_id]["dias"] = vigencia.dias
-                # CREAR EL ARRAY DE LOS VALORES DOCUMENTALES RELACIONADOS CON LA SERIE DEL EXPEDIENTE
-                try:
-                    valoresDocumentales_array = [valor.idValoracionPrimaria.nombre for valor in SerieValoracionPrimaria.objects.filter(idSerie_id=serie_id)]
-                except Exception as e:
-                    data['error'] = 'Parace que hubo un error al intentar consultar los valores documentales'
-                    return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                
-                actual_year = datetime.now().year
-                actual_month = datetime.now().month
-                actual_day = datetime.now().day
-
-                # ESTABLECER EL PATH EN DONDE ESTÁN LAS IMÁGENES DE LA PORTADA Y DONDE VA A CAER LA PORTADA
-                path_img = os.path.join(BASE_DIR, 'archexpedientes/img/')
-                portada_path = f'uridec/pdf_portadas/{actual_year}/{actual_month}/{actual_day}/{clave}_portada.pdf'
-                
-                try:
-                    Portadas.objects.create(
-                            name=f'Portada del expediente {clave}',
-                            path=portada_path,
-                            expediente_id=expediente_id,
-                            user_id=user_id,
-                        )
-                except Exception as e:
-                    data['error'] = 'Parece que ha habido un error al intentar crear la portada del expediente a la base de datos'
-                    return Response(data, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-                # CREAR EL PDF DE LA PORTADA
-                crear_portada(BASE_DIR, path_img, clave, expediente, vigencia_ids, valoresDocumentales_array, serie_id)
-                documents_array.append(os.path.join(BASE_DIR, f'archexpedientes/{portada_path}'))
-                
-            else:
-                documents_array.append(os.path.join(BASE_DIR, f'archexpedientes/{str(portada.path)}'))
-
-            # OBTENER LOS PATHS DE LOS DOCUMENTOS DEL EXPEDIENTE
-            get_documents_paths(BASE_DIR, documentos, documents_array)
-            
-            ubicacion_salida = os.path.join(BASE_DIR, f'archexpedientes/pdf_integrados/{clave}documento_integrado_no_foliado.pdf')
-
-            # Utilizar ThreadPoolExecutor para procesar los archivos en paralelo y unirlos
-            with ThreadPoolExecutor() as executor:
-                executor.submit(merge_files, documents_array, ubicacion_salida)
-                
-            foliador(ubicacion_salida, os.path.join(BASE_DIR, f'archexpedientes/pdf_integrados/{clave}documento_integrado.pdf'), portada)
-            
-            os.remove(ubicacion_salida)
-
-            return Response({'documento': f'pdf_integrados/{clave}documento_integrado.pdf'}, status=status.HTTP_200_OK)
-        else:
-            return Response(
-                {'error': 'Parece que el expediente seleccionado no tiene archivos cargados'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR)        
-
-
 
 class VerPortada(APIView):
     

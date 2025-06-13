@@ -7,7 +7,7 @@ Los placeholders a reemplazar deben ser:
 """
 
 LEYENDAS = {
-    "Unidad de Atención a Usuarios Metropolitana 1": (
+    "UNIDAD DE ATENCION A USUARIOS A1 (METROPOLITANA CENTRAL)": (
         "El/La Lic. {nombre_completo}, Titular de la Unidad de Atención a Usuarios Metropolitana 1, de la Comisión Nacional para la Protección y Defensa de los Usuarios de Servicios Financieros, "
         "con fundamento en los artículos 3; 4; 16; 26, fracción XX, y 28 de la Ley de Protección y Defensa al Usuario de Servicios Financieros; 1, 2, fracción II; 3, fracción I, numeral 2, inciso a, subinciso i; "
         "5, fracción I; 14, fracción XI y último párrafo; 31, fracción X, y 34, párrafo primero, del Estatuto Orgánico de esta Comisión Nacional."
