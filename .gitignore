@@ -1,1 +1,7 @@
 node_modules
+*.pyc
+*.pyc
+/USER_APP/migrations/__pycache__
+/DIGITALIZACION_APP/__pycache__
+/alfresco_clone/__pycache__
+/archexpedientes
